@@ -24,14 +24,14 @@ APlayerCharacter::APlayerCharacter()
 	}
 	// Mesh의 Location, Rotation 설정
 	GetMesh()->SetRelativeLocationAndRotation(FVector(0.f, 0.f, -85.0f), FRotator(0.0f, -90.0f, 0.f));
-	
+
 	//캡슐 콜리전 크기 조절
 	GetCapsuleComponent()->InitCapsuleSize(34.0f, 85.0f);
 
 	// SpringArm 오브젝트 생성
 	CCameraArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("CCameraArm"));
 	CCameraArm->SetupAttachment(RootComponent);
-	CCameraArm->TargetArmLength = 400.0f;
+	CCameraArm->TargetArmLength = 300.0f;
 	CCameraArm->bUsePawnControlRotation = true; // 컨트롤러 회전에 따라 카메라 회전
 
 	// Camera 오브젝트 생성
@@ -40,13 +40,13 @@ APlayerCharacter::APlayerCharacter()
 
 	// 이동 설정
 	bUseControllerRotationYaw = false; // 마우스 회전해도 캐릭터 회전하지않음
-	
+
 	GetCharacterMovement()->bOrientRotationToMovement = true; // 이동 방향으로 캐릭터 회전
-	GetCharacterMovement()->JumpZVelocity = 700.0f;	// 점프시 z축 속도
-	GetCharacterMovement()->AirControl = 0.35f;	// 공중에 떠있는 속도
-	GetCharacterMovement()->MaxWalkSpeed = 500.0f;	// 최대 이동속도
-	GetCharacterMovement()->MinAnalogWalkSpeed = 20.0f;	// 최소 아날로그 속도
-	GetCharacterMovement()->BrakingDecelerationWalking = 2000.f;	// 제동속도
+	GetCharacterMovement()->JumpZVelocity = 500.0f; // 점프시 z축 속도
+	// GetCharacterMovement()->AirControl = 0.35f;	// 공중에 떠있는 속도
+	GetCharacterMovement()->MaxWalkSpeed = JogSpeed; // 최대 이동속도
+	GetCharacterMovement()->MinAnalogWalkSpeed = 20.0f; // 최소 아날로그 속도
+	GetCharacterMovement()->BrakingDecelerationWalking = 2000.f; // 제동속도
 }
 
 // Called when the game starts or when spawned
@@ -79,14 +79,23 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
 		// Jump (Action)
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+		// EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
+		// EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &APlayerCharacter::Jump);
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &APlayerCharacter::StopJumping);
 
 		// Move (Axis)
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Move);
 
 		// Look (Axis)
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Look);
+
+		// Sprint (Action)
+		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Started, this, &APlayerCharacter::StartSprint);
+		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &APlayerCharacter::StopSprint);
+		
+		// Roll (Action)
+		EnhancedInputComponent->BindAction(RollAction, ETriggerEvent::Started, this, &APlayerCharacter::Roll);
 	}
 }
 
@@ -122,4 +131,26 @@ void APlayerCharacter::Look(const FInputActionValue& Value)
 		AddControllerYawInput(LookAxisVector.X); // X축 : Yaw
 		AddControllerPitchInput(LookAxisVector.Y); // Y축 : Pitch
 	}
+}
+
+void APlayerCharacter::StartSprint(const FInputActionValue& Value)
+{
+	GetCharacterMovement()->MaxWalkSpeed = SprintSpeed; // 최대 이동속도 변경
+}
+
+void APlayerCharacter::StopSprint(const FInputActionValue& Value)
+{
+	GetCharacterMovement()->MaxWalkSpeed = JogSpeed; // 최대 이동속도 변경
+}
+
+void APlayerCharacter::Roll()
+{
+	if (GetCharacterMovement()->IsFalling()) return;	// 공중에서는 구르지 못함, 구르기 하는 중에는 못하게 추가해야 함
+	
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	if (AnimInstance && RollMontage)
+	{
+		AnimInstance->Montage_Play(RollMontage, RollSpeed);
+	}
+	GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Green, TEXT("Rolling"));
 }

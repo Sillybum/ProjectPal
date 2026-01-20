@@ -44,16 +44,43 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
 	UInputMappingContext* CMappingContext;
 
+	// 점프
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
 	UInputAction* JumpAction;
 
+	// 움직임
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
 	UInputAction* MoveAction;
-
+	
+	// 시야
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
 	UInputAction* LookAction;
+	
+	// 달리기
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
+	UInputAction* SprintAction;
+	
+	// 구르기
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
+	UInputAction* RollAction;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
+	UAnimMontage* RollMontage;	// 구르기 몽타주 변수
+	
+	// 속도 변화를 위한 변수
+	UPROPERTY(EditAnywhere, Category="Movement", meta=(AllowPrivateAccess="true"))
+	float JogSpeed = 400.0f;
+	UPROPERTY(EditAnywhere, Category="Movement", meta=(AllowPrivateAccess="true"))
+	float SprintSpeed = 600.0f;
+	
+	// 구르기 속도 함수 : Montage Play Rate값
+	UPROPERTY(EditAnywhere, Category="Movement", meta=(AllowPrivateAccess="true"))
+	float RollSpeed = 1.0f;
 
 protected:
-	void Move(const FInputActionValue& Value);
-	void Look(const FInputActionValue& Value);
+	// 바인딩할 함수
+	void Move(const FInputActionValue& Value);	// 기본 움직임(Jogging)
+	void Look(const FInputActionValue& Value);	// 기본 시야
+	void StartSprint(const FInputActionValue& Value);	// 달리기 시작
+	void StopSprint(const FInputActionValue& Value);	// 달리기 끝
+	void Roll();
 };

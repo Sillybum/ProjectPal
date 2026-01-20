@@ -1,0 +1,41 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Animation/AnimInstance.h"
+#include "PlayerAnimInstance.generated.h"
+
+/**
+ * 
+ */
+UCLASS()
+class PROJECTPAL_API UPlayerAnimInstance : public UAnimInstance
+{
+	GENERATED_BODY()
+
+public:
+	virtual void NativeInitializeAnimation(); // AnimInstance가 처음 생성될 때 한번 호출됨
+	virtual void NativeUpdateAnimation(float DeltaTime); // 매 프레임 호출
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+	class ACharacter* Player;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+	class UCharacterMovementComponent* MovementComponent;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+	float Speed;	// 속도
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+	FVector Acceleration;	// 가속
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+	bool IsMoving;	// 움직임 여부 검사
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+	bool IsFalling;	// 공중 검사
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+	bool IsRising;	// 올라가는 중인지 검사
+};
