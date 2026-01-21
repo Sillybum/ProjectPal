@@ -5,15 +5,16 @@
 #include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
-#include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Components/CapsuleComponent.h"
+#include "GameFramework/MyPlayerController.h"
+#include "GameFramework/MyPlayerState.h"
 
 // Sets default values
 APlayerCharacter::APlayerCharacter()
 {
 	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
 
 	// 스켈레탈메시 로드
 	static ConstructorHelpers::FObjectFinder<USkeletalMesh> MeshAsset(
@@ -31,7 +32,7 @@ APlayerCharacter::APlayerCharacter()
 	// SpringArm 오브젝트 생성
 	CCameraArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("CCameraArm"));
 	CCameraArm->SetupAttachment(RootComponent);
-	CCameraArm->TargetArmLength = 300.0f;
+	CCameraArm->TargetArmLength = DefaultArmLength;
 	CCameraArm->bUsePawnControlRotation = true; // 컨트롤러 회전에 따라 카메라 회전
 
 	// Camera 오브젝트 생성
@@ -42,6 +43,7 @@ APlayerCharacter::APlayerCharacter()
 	bUseControllerRotationYaw = false; // 마우스 회전해도 캐릭터 회전하지않음
 
 	GetCharacterMovement()->bOrientRotationToMovement = true; // 이동 방향으로 캐릭터 회전
+	GetCharacterMovement()->RotationRate = FRotator(0.0f, 500.0f, 0.0f); // 캐릭터 회전 속도
 	GetCharacterMovement()->JumpZVelocity = 500.0f; // 점프시 z축 속도
 	// GetCharacterMovement()->AirControl = 0.35f;	// 공중에 떠있는 속도
 	GetCharacterMovement()->MaxWalkSpeed = JogSpeed; // 최대 이동속도
@@ -59,44 +61,14 @@ void APlayerCharacter::BeginPlay()
 void APlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-}
 
-// Called to bind functionality to input
-void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
-{
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
+	// 카메라 줌 수치 결정
+	float TargetFOV = bIsAiming ? AimFOV : DefaultFOV;
+	float TargetArmLength = bIsAiming ? AimArmLength : DefaultArmLength;
 
-	// 입력 바인딩
-	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
-	{
-		if (UEnhancedInputLocalPlayerSubsystem* SubSystem = ULocalPlayer::GetSubsystem<
-			UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
-		{
-			SubSystem->AddMappingContext(CMappingContext, 0);
-		}
-	}
-
-	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
-	{
-		// Jump (Action)
-		// EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
-		// EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &APlayerCharacter::Jump);
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &APlayerCharacter::StopJumping);
-
-		// Move (Axis)
-		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Move);
-
-		// Look (Axis)
-		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Look);
-
-		// Sprint (Action)
-		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Started, this, &APlayerCharacter::StartSprint);
-		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &APlayerCharacter::StopSprint);
-		
-		// Roll (Action)
-		EnhancedInputComponent->BindAction(RollAction, ETriggerEvent::Started, this, &APlayerCharacter::Roll);
-	}
+	// FInterpTo를 사용해 부드럽게 전환
+	CCamera->FieldOfView = FMath::FInterpTo(CCamera->FieldOfView, TargetFOV, DeltaTime, 10.f);
+	CCameraArm->TargetArmLength = FMath::FInterpTo(CCameraArm->TargetArmLength, TargetArmLength, DeltaTime, 10.f);
 }
 
 void APlayerCharacter::Move(const FInputActionValue& Value)
@@ -145,12 +117,58 @@ void APlayerCharacter::StopSprint(const FInputActionValue& Value)
 
 void APlayerCharacter::Roll()
 {
-	if (GetCharacterMovement()->IsFalling()) return;	// 공중에서는 구르지 못함, 구르기 하는 중에는 못하게 추가해야 함
-	
+	// PlayerController를 받아옴
+	AMyPlayerController* PC = Cast<AMyPlayerController>(GetController());
+	// PlayerState를 받아옴
+	AMyPlayerState* PS = GetPlayerState<AMyPlayerState>();
+
+	// PlayerState와 PlayerController를 받아오지 못했다면 실행하지 않음
+	if (!PS || !PC) return;
+	// 공중에서는 구르지 못함
+	if (GetCharacterMovement()->IsFalling()) return;
+	// 이미 구르기 중이라면 구르지 못하게 함 (PlayerState 이용)
+	if (PS->GetActionState() == EMyPlayerState::Rolling) return;
+
+	// --- 즉시 회전 로직 추가 ---
+	// 현재 이동 입력 벡터를 가져옵니다 (MoveAction의 현재 값)
+	// Controller에서 현재 입력 중인 축 값을 확인하거나, 마지막 이동 입력을 참조합니다.
+	FVector LastInput = GetLastMovementInputVector();
+	// 만약 입력이 있다면 (방향키를 누르고 있다면)
+	if (!LastInput.IsNearlyZero())
+	{
+		// 입력 방향을 바라보도록 즉시 회전
+		FRotator NewRotation = LastInput.Rotation();
+		NewRotation.Pitch = 0.f;
+		NewRotation.Roll = 0.f;
+		SetActorRotation(NewRotation);
+	}
+
 	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
 	if (AnimInstance && RollMontage)
 	{
-		AnimInstance->Montage_Play(RollMontage, RollSpeed);
+		// EMyPlayerState를 Rolling으로 변경
+		PS->SetActionState(EMyPlayerState::Rolling);
+		// 현재 State를 기준으로 IMC 교체
+		PC->UpdateInputContext();
+
+		// 몽타주 실행 : 실행 시간을 Duration으로 저장 해줌
+		float Duration = AnimInstance->Montage_Play(RollMontage, RollSpeed);
+
+		// 몽타주가 끝날 때 상태를 복구하기 위한 타이머 (또는 Montage_SetEndDelegate 사용 가능)
+		FTimerHandle TimerHandle;
+		GetWorldTimerManager().SetTimer(TimerHandle, FTimerDelegate::CreateLambda([PS, PC]()
+		{
+			if (PC && PS && PS->GetActionState() == EMyPlayerState::Rolling)
+			{
+				PS->SetActionState(EMyPlayerState::Idle); // 또는 NONE
+				PC->UpdateInputContext();
+				GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Green, TEXT("State: Rolling Finished"));
+			}
+		}), Duration, false);
 	}
-	GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Green, TEXT("Rolling"));
+}
+
+void APlayerCharacter::SetAiming(bool isAiming)
+{
+	bIsAiming = isAiming;
 }
